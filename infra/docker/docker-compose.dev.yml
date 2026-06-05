@@ -1,0 +1,48 @@
+# ============================================
+# DeskLink — Local Development Stack
+# Starts PostgreSQL, Redis, and coturn for local development.
+# Usage: docker compose -f infra/docker/docker-compose.dev.yml up -d
+# ============================================
+
+services:
+  postgres:
+    image: postgres:16-alpine
+    container_name: desklink-postgres
+    environment:
+      POSTGRES_USER: desklink
+      POSTGRES_PASSWORD: desklink_dev
+      POSTGRES_DB: desklink
+    ports:
+      - "5432:5432"
+    volumes:
+      - desklink_pgdata:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U desklink"]
+      interval: 5s
+      timeout: 5s
+      retries: 5
+
+  redis:
+    image: redis:7-alpine
+    container_name: desklink-redis
+    ports:
+      - "6379:6379"
+    volumes:
+      - desklink_redis:/data
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 5s
+      timeout: 5s
+      retries: 5
+
+  coturn:
+    image: coturn/coturn:latest
+    container_name: desklink-coturn
+    network_mode: host
+    volumes:
+      - ../coturn/turnserver.conf:/etc/coturn/turnserver.conf:ro
+    restart: unless-stopped
+
+volumes:
+  desklink_pgdata:
+  desklink_redis:

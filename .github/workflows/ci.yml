@@ -1,0 +1,72 @@
+# ============================================
+# DeskLink — CI Pipeline
+# Runs lint, build, and test on pull requests.
+# ============================================
+
+name: CI
+
+on:
+  push:
+    branches: [main, develop]
+  pull_request:
+    branches: [main, develop]
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  lint-build-test:
+    name: Lint, Build & Test
+    runs-on: ubuntu-latest
+
+    services:
+      postgres:
+        image: postgres:16-alpine
+        env:
+          POSTGRES_USER: desklink
+          POSTGRES_PASSWORD: desklink_test
+          POSTGRES_DB: desklink_test
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd="pg_isready -U desklink"
+          --health-interval=5s
+          --health-timeout=5s
+          --health-retries=5
+
+      redis:
+        image: redis:7-alpine
+        ports:
+          - 6379:6379
+        options: >-
+          --health-cmd="redis-cli ping"
+          --health-interval=5s
+          --health-timeout=5s
+          --health-retries=5
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: npm
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Lint
+        run: npm run lint
+
+      - name: Build
+        run: npm run build
+
+      - name: Test
+        run: npm run test
+        env:
+          DATABASE_URL: postgresql://desklink:desklink_test@localhost:5432/desklink_test
+          REDIS_URL: redis://localhost:6379
+          JWT_SECRET: test-secret-do-not-use-in-production

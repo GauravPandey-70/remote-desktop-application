@@ -1,0 +1,94 @@
+# ============================================
+# DeskLink — Production Stack
+# Starts PostgreSQL, Redis, NestJS API Server, Signaling Server, and coturn.
+# Usage: docker compose -f infra/docker/docker-compose.prod.yml up -d
+# ============================================
+
+services:
+  postgres:
+    image: postgres:16-alpine
+    container_name: desklink-postgres-prod
+    environment:
+      POSTGRES_USER: ${POSTGRES_USER:-desklink}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-desklink_prod}
+      POSTGRES_DB: ${POSTGRES_DB:-desklink}
+    ports:
+      - "5432:5432"
+    volumes:
+      - desklink_prod_pgdata:/var/lib/postgresql/data
+    restart: always
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U $${POSTGRES_USER:-desklink}"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  redis:
+    image: redis:7-alpine
+    container_name: desklink-redis-prod
+    ports:
+      - "6379:6379"
+    volumes:
+      - desklink_prod_redis:/data
+    restart: always
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  api-server:
+    build:
+      context: ../../
+      dockerfile: packages/api-server/Dockerfile
+    container_name: desklink-api-prod
+    environment:
+      NODE_ENV: production
+      DATABASE_URL: postgresql://${POSTGRES_USER:-desklink}:${POSTGRES_PASSWORD:-desklink_prod}@postgres:5432/${POSTGRES_DB:-desklink}
+      REDIS_URL: redis://redis:6379
+      API_PORT: 3000
+      API_HOST: 0.0.0.0
+      JWT_SECRET: ${JWT_SECRET:-change-me-in-production-use-a-64-char-random-string}
+      JWT_EXPIRES_IN: ${JWT_EXPIRES_IN:-7d}
+      TURN_SERVER_URL: ${TURN_SERVER_URL:-turn:localhost:3478}
+      TURN_SERVER_USERNAME: ${TURN_SERVER_USERNAME:-desklink}
+      TURN_SERVER_PASSWORD: ${TURN_SERVER_PASSWORD:-desklink_turn_dev}
+      TURN_SERVER_REALM: ${TURN_SERVER_REALM:-desklink.local}
+      STUN_SERVER_URL: ${STUN_SERVER_URL:-stun:stun.l.google.com:19302}
+    ports:
+      - "3000:3000"
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+    restart: always
+
+  signaling-server:
+    build:
+      context: ../../
+      dockerfile: packages/signaling-server/Dockerfile
+    container_name: desklink-signaling-prod
+    environment:
+      NODE_ENV: production
+      REDIS_URL: redis://redis:6379
+      SIGNALING_PORT: 8080
+      SIGNALING_HOST: 0.0.0.0
+    ports:
+      - "8080:8080"
+    depends_on:
+      redis:
+        condition: service_healthy
+    restart: always
+
+  coturn:
+    image: coturn/coturn:latest
+    container_name: desklink-coturn-prod
+    network_mode: host
+    volumes:
+      - ../coturn/turnserver.conf:/etc/coturn/turnserver.conf:ro
+    restart: always
+
+volumes:
+  desklink_prod_pgdata:
+  desklink_prod_redis:

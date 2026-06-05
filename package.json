@@ -1,0 +1,33 @@
+{
+  "name": "desklink",
+  "version": "0.1.0",
+  "private": true,
+  "packageManager": "npm@11.9.0",
+  "description": "DeskLink — Production-grade remote desktop platform",
+  "workspaces": [
+    "packages/*",
+    "apps/*"
+  ],
+  "scripts": {
+    "build": "turbo run build",
+    "dev": "turbo run dev",
+    "lint": "turbo run lint",
+    "test": "turbo run test",
+    "format": "prettier --write \"**/*.{ts,tsx,js,json,css,md}\"",
+    "format:check": "prettier --check \"**/*.{ts,tsx,js,json,css,md}\"",
+    "db:migrate": "npm run migrate --workspace=packages/api-server",
+    "db:seed": "npm run seed --workspace=packages/api-server",
+    "clean": "turbo run clean && rimraf node_modules"
+  },
+  "devDependencies": {
+    "turbo": "^2.5.0",
+    "typescript": "^5.7.0",
+    "prettier": "^3.4.0",
+    "rimraf": "^6.0.0",
+    "@types/node": "^22.0.0"
+  },
+  "engines": {
+    "node": ">=20.0.0",
+    "npm": ">=10.0.0"
+  }
+}
