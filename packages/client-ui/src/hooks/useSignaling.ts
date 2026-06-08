@@ -16,7 +16,7 @@ function generateMessageId(): string {
   return Array.from(arr, (b) => b.toString(16).padStart(2, '0')).join('');
 }
 
-const SIGNALING_URL = `ws://${window.location.hostname}:8080/ws`;
+const SIGNALING_URL = import.meta.env.VITE_SIGNALING_URL || `ws://${window.location.hostname}:8080/ws`;
 
 export function useSignaling(deviceId: string) {
   const [isConnected, setIsConnected] = useState(false);
