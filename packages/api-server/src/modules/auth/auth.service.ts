@@ -127,4 +127,37 @@ export class AuthService {
     await this.passcodeRepository.delete(passcode.id);
     return true;
   }
+
+  async resolvePasscode(passcodeVal: string): Promise<string> {
+    const activePasscodes = await this.passcodeRepository.find({
+      where: {
+        expiresAt: MoreThan(new Date()),
+      },
+      relations: ['device'],
+    });
+
+    for (const passcode of activePasscodes) {
+      const computedHash = crypto.pbkdf2Sync(passcodeVal, passcode.salt, 1000, 64, 'sha256').toString('hex');
+      if (computedHash === passcode.hash) {
+        const maxAttempts = parseInt(process.env.PASSCODE_MAX_ATTEMPTS ?? '5', 10);
+        if (passcode.attempts >= maxAttempts) {
+          throw new UnauthorizedException('Device passcode is locked due to too many attempts. Please request a new passcode.');
+        }
+
+        // Passcode verified, consume/delete it so it cannot be used again
+        await this.passcodeRepository.delete(passcode.id);
+
+        if (passcode.device) {
+          return passcode.device.deviceId;
+        }
+        
+        const device = await this.deviceRepository.findOne({ where: { id: passcode.deviceId } });
+        if (device) {
+          return device.deviceId;
+        }
+      }
+    }
+
+    throw new UnauthorizedException('Invalid or expired passcode');
+  }
 }

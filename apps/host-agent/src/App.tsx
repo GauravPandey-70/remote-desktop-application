@@ -1,19 +1,36 @@
 import React, { useEffect, useState } from 'react';
-import { invoke } from '@tauri-apps/api/core';
 import { WebRTCHost } from './WebRTCHost';
 
+const invoke = async <T,>(cmd: string, args?: any): Promise<T> => {
+  if (typeof window !== 'undefined' && (window as any).__TAURI_INTERNALS__) {
+    const core = await import('@tauri-apps/api/core');
+    return core.invoke<T>(cmd, args);
+  }
+  throw new Error('Tauri environment not detected');
+};
+
 const App: React.FC = () => {
-  const [deviceId, setDeviceId] = useState<string>('DL-000-000');
+  const [deviceId, setDeviceId] = useState<string>('DL-000-000-000');
   const [passcode, setPasscode] = useState<string>('------');
   const [status, setStatus] = useState<'disconnected' | 'connecting' | 'connected' | 'error'>('disconnected');
   const [activeSessions, setActiveSessions] = useState<number>(0);
-  const [copied, setCopied] = useState<boolean>(false);
+  const [copiedId, setCopiedId] = useState<boolean>(false);
+  const [copiedLink, setCopiedLink] = useState<boolean>(false);
 
   useEffect(() => {
     // Fetch or generate persistent Device ID on load
     invoke<string>('get_device_id')
       .then((id) => setDeviceId(id))
-      .catch((err) => console.error('Failed to get Device ID:', err));
+      .catch((err) => {
+        console.warn('Tauri not detected, generating mock Device ID:', err);
+        // Generate a random testing ID matching format DL-XXX-XXX-XXX
+        const charset = '23456789ABCDEFGHJKLMNPQRSTUVWXYZ';
+        let random = '';
+        for (let i = 0; i < 9; i++) {
+          random += charset[Math.floor(Math.random() * charset.length)];
+        }
+        setDeviceId(`DL-${random.slice(0, 3)}-${random.slice(3, 6)}-${random.slice(6, 9)}`);
+      });
 
     // Request initial rotating passcode
     rotatePasscode();
@@ -23,13 +40,45 @@ const App: React.FC = () => {
     // Generate a random 6-digit passcode
     const newPasscode = Math.floor(100000 + Math.random() * 900000).toString();
     setPasscode(newPasscode);
-    setCopied(false);
+    setCopiedId(false);
+    setCopiedLink(false);
   };
 
-  const copyToClipboard = (text: string) => {
-    navigator.clipboard.writeText(text);
-    setCopied(true);
-    setTimeout(() => setCopied(false), 2000);
+  const copyToClipboard = (text: string, type: 'id' | 'link') => {
+    const setCopiedState = type === 'id' ? setCopiedId : setCopiedLink;
+    if (navigator.clipboard && navigator.clipboard.writeText) {
+      navigator.clipboard.writeText(text)
+        .then(() => {
+          setCopiedState(true);
+          setTimeout(() => setCopiedState(false), 2000);
+        })
+        .catch((err) => {
+          console.error('Failed to copy:', err);
+          fallbackCopy(text, type);
+        });
+    } else {
+      fallbackCopy(text, type);
+    }
+  };
+
+  const fallbackCopy = (text: string, type: 'id' | 'link') => {
+    const setCopiedState = type === 'id' ? setCopiedId : setCopiedLink;
+    const textArea = document.createElement('textarea');
+    textArea.value = text;
+    textArea.style.top = '0';
+    textArea.style.left = '0';
+    textArea.style.position = 'fixed';
+    document.body.appendChild(textArea);
+    textArea.focus();
+    textArea.select();
+    try {
+      document.execCommand('copy');
+      setCopiedState(true);
+      setTimeout(() => setCopiedState(false), 2000);
+    } catch (err) {
+      console.error('Fallback copy failed:', err);
+    }
+    document.body.removeChild(textArea);
   };
 
   const statusColors = {
@@ -58,8 +107,8 @@ const App: React.FC = () => {
           <label style={styles.label}>Your Device ID</label>
           <div style={styles.idDisplay}>
             <span>{deviceId}</span>
-            <button style={styles.copyBtn} onClick={() => copyToClipboard(deviceId)}>
-              {copied ? 'Copied' : 'Copy'}
+            <button style={styles.copyBtn} onClick={() => copyToClipboard(deviceId, 'id')}>
+              {copiedId ? 'Copied' : 'Copy'}
             </button>
           </div>
         </div>
@@ -81,8 +130,8 @@ const App: React.FC = () => {
             <span style={{ ...styles.passcodeVal, fontSize: '12px', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', maxWidth: '200px' }}>
               {`desklink://connect?id=${deviceId}&passcode=${passcode}`}
             </span>
-            <button style={styles.copyBtn} onClick={() => copyToClipboard(`desklink://connect?id=${deviceId}&passcode=${passcode}`)}>
-              Link
+            <button style={styles.copyBtn} onClick={() => copyToClipboard(`desklink://connect?id=${deviceId}&passcode=${passcode}`, 'link')}>
+              {copiedLink ? 'Copied' : 'Link'}
             </button>
           </div>
         </div>

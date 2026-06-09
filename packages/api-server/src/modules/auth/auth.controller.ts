@@ -3,6 +3,7 @@ import { AuthService } from './auth.service';
 import { RegisterDto } from './dto/register.dto';
 import { LoginDto } from './dto/login.dto';
 import { VerifyPasscodeDto } from './dto/verify-passcode.dto';
+import { ResolvePasscodeDto } from './dto/resolve-passcode.dto';
 
 @Controller('api/v1/auth')
 export class AuthController {
@@ -27,5 +28,11 @@ export class AuthController {
   async verifyPasscode(@Body(new ValidationPipe()) verifyPasscodeDto: VerifyPasscodeDto) {
     const isValid = await this.authService.verifyPasscode(verifyPasscodeDto.deviceId, verifyPasscodeDto.passcode);
     return { success: isValid };
+  }
+
+  @Post('passcode/resolve')
+  async resolvePasscode(@Body(new ValidationPipe()) resolvePasscodeDto: ResolvePasscodeDto) {
+    const deviceId = await this.authService.resolvePasscode(resolvePasscodeDto.passcode);
+    return { deviceId };
   }
 }

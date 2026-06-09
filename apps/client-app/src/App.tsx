@@ -10,13 +10,67 @@ interface Device {
 }
 
 export default function App() {
-  const [token, setToken] = useState<string | null>(localStorage.getItem('token'));
-  const [email, setEmail] = useState('');
+  const [token, setToken] = useState<string | null>('bypass');
+  const [email, setEmail] = useState('local-user');
   const [password, setPassword] = useState('');
   const [devices, setDevices] = useState<Device[]>([]);
   const [targetId, setTargetId] = useState('');
   const [passcode, setPasscode] = useState('');
   const [showPasscodeModal, setShowPasscodeModal] = useState(false);
+  const [activeTab, setActiveTab] = useState<'deviceId' | 'passcode' | 'shareLink'>('deviceId');
+  const [shareLink, setShareLink] = useState('');
+
+  const handlePasscodeConnect = async () => {
+    if (!passcode) return;
+    setSessionState('connecting');
+    try {
+      const res = await fetch(`http://${window.location.hostname}:3000/api/v1/auth/passcode/resolve`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ passcode }),
+      });
+      if (!res.ok) {
+        const errorData = await res.json();
+        throw new Error(errorData.message || 'Failed to resolve passcode');
+      }
+      const data = await res.json();
+      if (data.deviceId) {
+        setTargetId(data.deviceId);
+        startConnection(data.deviceId);
+      } else {
+        throw new Error('Device ID not found in response');
+      }
+    } catch (err: any) {
+      alert(err.message || 'Network error connecting to backend API');
+      setSessionState('error');
+    }
+  };
+
+  const handleShareLinkConnect = () => {
+    if (!shareLink) return;
+    if (shareLink.startsWith('desklink://')) {
+      try {
+        const url = new URL(shareLink.replace('desklink://', 'http://'));
+        const id = url.searchParams.get('id');
+        const code = url.searchParams.get('passcode');
+        if (id) {
+          setTargetId(id);
+          if (code) {
+            setPasscode(code);
+            startConnection(id);
+          } else {
+            startConnection(id);
+          }
+        } else {
+          alert('Invalid share link: missing device ID');
+        }
+      } catch (err) {
+        alert('Invalid share link format');
+      }
+    } else {
+      alert('Invalid share link protocol. Must start with desklink://');
+    }
+  };
   
   // Connection states
   const [sessionState, setSessionState] = useState<'disconnected' | 'connecting' | 'connected' | 'error'>('disconnected');
@@ -30,7 +84,7 @@ export default function App() {
   // Load devices list if logged in
   useEffect(() => {
     if (token) {
-      fetch('http://localhost:3000/api/v1/devices', {
+      fetch(`http://${window.location.hostname}:3000/api/v1/devices`, {
         headers: { Authorization: `Bearer ${token}` }
       })
         .then((res) => res.json())
@@ -51,7 +105,7 @@ export default function App() {
   const handleLogin = async (e: React.FormEvent) => {
     e.preventDefault();
     try {
-      const res = await fetch('http://localhost:3000/api/v1/auth/login', {
+      const res = await fetch(`http://${window.location.hostname}:3000/api/v1/auth/login`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ email, password }),
@@ -93,12 +147,13 @@ export default function App() {
     }
   };
 
-  const startConnection = () => {
-    if (!targetId) return;
+  const startConnection = (overrideTargetId?: string) => {
+    const activeTargetId = overrideTargetId || targetId;
+    if (!activeTargetId) return;
     setSessionState('connecting');
 
     // Create websocket signaling connection
-    const ws = new WebSocket('ws://localhost:3000/signaling');
+    const ws = new WebSocket(`ws://${window.location.hostname}:3000/signaling`);
     wsRef.current = ws;
 
     ws.onopen = () => {
@@ -109,7 +164,7 @@ export default function App() {
           messageId: Math.random().toString(),
           timestamp: new Date().toISOString(),
           payload: {
-            targetDeviceId: targetId,
+            targetDeviceId: activeTargetId,
             clientDeviceId: 'DL-CLIENT-VIEWER',
             clientPublicKey: 'placeholder_client_pubkey',
             clientDisplayName: 'Viewer Client',
@@ -369,24 +424,86 @@ export default function App() {
             {/* AnyDesk-style Connection card */}
             <div style={styles.card}>
               <div style={styles.profileHeader}>
-                <span>Active Account: {email}</span>
-                <button style={styles.logoutBtn} onClick={handleLogout}>Logout</button>
+                <span>Direct Connection Mode</span>
               </div>
 
-              <div style={styles.fieldGroup}>
-                <label style={styles.label}>Remote Device ID</label>
-                <input
-                  type="text"
-                  placeholder="Enter Remote 9-Digit ID"
-                  value={targetId}
-                  onChange={(e) => handleIdChange(e.target.value)}
-                  style={styles.input}
-                />
+              <div style={styles.tabsContainer}>
+                <button
+                  type="button"
+                  style={{ ...styles.tabButton, ...(activeTab === 'deviceId' ? styles.activeTabButton : {}) }}
+                  onClick={() => setActiveTab('deviceId')}
+                >
+                  Device ID
+                </button>
+                <button
+                  type="button"
+                  style={{ ...styles.tabButton, ...(activeTab === 'passcode' ? styles.activeTabButton : {}) }}
+                  onClick={() => setActiveTab('passcode')}
+                >
+                  Passcode
+                </button>
+                <button
+                  type="button"
+                  style={{ ...styles.tabButton, ...(activeTab === 'shareLink' ? styles.activeTabButton : {}) }}
+                  onClick={() => setActiveTab('shareLink')}
+                >
+                  Share Link
+                </button>
               </div>
 
-              <button style={styles.connectBtn} onClick={startConnection}>
-                {sessionState === 'connecting' ? 'Connecting...' : 'Connect to Host'}
-              </button>
+              {activeTab === 'deviceId' && (
+                <>
+                  <div style={styles.fieldGroup}>
+                    <label style={styles.label}>Remote Device ID</label>
+                    <input
+                      type="text"
+                      placeholder="Enter Remote 9-Digit ID"
+                      value={targetId}
+                      onChange={(e) => handleIdChange(e.target.value)}
+                      style={styles.input}
+                    />
+                  </div>
+                  <button style={styles.connectBtn} onClick={() => startConnection()}>
+                    {sessionState === 'connecting' ? 'Connecting...' : 'Connect'}
+                  </button>
+                </>
+              )}
+
+              {activeTab === 'passcode' && (
+                <>
+                  <div style={styles.fieldGroup}>
+                    <label style={styles.label}>One-Time Passcode</label>
+                    <input
+                      type="text"
+                      placeholder="Enter 6-Digit Passcode"
+                      value={passcode}
+                      onChange={(e) => setPasscode(e.target.value)}
+                      style={styles.input}
+                    />
+                  </div>
+                  <button style={styles.connectBtn} onClick={handlePasscodeConnect}>
+                    {sessionState === 'connecting' ? 'Connecting...' : 'Connect'}
+                  </button>
+                </>
+              )}
+
+              {activeTab === 'shareLink' && (
+                <>
+                  <div style={styles.fieldGroup}>
+                    <label style={styles.label}>Share Link</label>
+                    <input
+                      type="text"
+                      placeholder="Paste desklink://connect?id=...&passcode=..."
+                      value={shareLink}
+                      onChange={(e) => setShareLink(e.target.value)}
+                      style={styles.input}
+                    />
+                  </div>
+                  <button style={styles.connectBtn} onClick={handleShareLinkConnect}>
+                    {sessionState === 'connecting' ? 'Connecting...' : 'Connect'}
+                  </button>
+                </>
+              )}
             </div>
           </div>
 
@@ -700,5 +817,29 @@ const styles = {
     borderRadius: '6px',
     cursor: 'pointer',
     fontWeight: 'bold',
+  },
+  tabsContainer: {
+    display: 'flex',
+    gap: '8px',
+    marginBottom: '20px',
+    borderBottom: '1px solid #334155',
+    paddingBottom: '12px',
+  },
+  tabButton: {
+    flex: 1,
+    backgroundColor: '#1E293B',
+    color: '#94A3B8',
+    border: '1px solid #334155',
+    borderRadius: '6px',
+    padding: '8px 12px',
+    cursor: 'pointer',
+    fontWeight: 'bold',
+    fontSize: '13px',
+    transition: 'all 0.2s',
+  },
+  activeTabButton: {
+    backgroundColor: '#3B82F6',
+    color: 'white',
+    border: '1px solid #3B82F6',
   },
 };

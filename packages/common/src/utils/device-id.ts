@@ -32,7 +32,7 @@ export function generateDeviceId(): string {
   }
 
   const raw = chars.join('');
-  return `DL-${raw.slice(0, 3)}-${raw.slice(3, 6)}-${raw.slice(6, 8)}`;
+  return `DL-${raw.slice(0, 3)}-${raw.slice(3, 6)}-${raw.slice(6, 9)}`;
 }
 
 /**
@@ -63,6 +63,6 @@ export function normalizeDeviceId(input: string): string | null {
     }
   }
 
-  const formatted = `DL-${raw.slice(0, 3)}-${raw.slice(3, 6)}-${raw.slice(6, 8)}`;
+  const formatted = `DL-${raw.slice(0, 3)}-${raw.slice(3, 6)}-${raw.slice(6, 9)}`;
   return isValidDeviceId(formatted) ? formatted : null;
 }

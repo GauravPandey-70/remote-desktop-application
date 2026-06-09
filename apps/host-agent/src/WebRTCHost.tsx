@@ -1,5 +1,12 @@
 import React, { useEffect, useRef, useState } from 'react';
-import { invoke } from '@tauri-apps/api/core';
+
+const invoke = async <T,>(cmd: string, args?: any): Promise<T> => {
+  if (typeof window !== 'undefined' && (window as any).__TAURI_INTERNALS__) {
+    const core = await import('@tauri-apps/api/core');
+    return core.invoke<T>(cmd, args);
+  }
+  throw new Error('Tauri environment not detected');
+};
 
 interface WebRTCHostProps {
   deviceId: string;
@@ -23,7 +30,7 @@ export const WebRTCHost: React.FC<WebRTCHostProps> = ({
     if (!deviceId) return;
 
     onStatusChange('connecting');
-    const wsUrl = process.env.SIGNALING_URL || 'ws://localhost:3000/signaling';
+    const wsUrl = (typeof process !== 'undefined' && process.env?.SIGNALING_URL) || `ws://${window.location.hostname}:3000/signaling`;
     const ws = new WebSocket(wsUrl);
     wsRef.current = ws;
 

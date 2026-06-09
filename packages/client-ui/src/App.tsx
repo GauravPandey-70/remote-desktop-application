@@ -13,14 +13,13 @@ export function App() {
   const [isConnecting, setIsConnecting] = useState(false);
   const [connectionError, setConnectionError] = useState<string | null>(null);
 
-  // Generate a random local device ID for testing (matches real ID format)
   const localDeviceId = useMemo(() => {
     const charset = '23456789ABCDEFGHJKLMNPQRSTUVWXYZ';
     let random = '';
-    for (let i = 0; i < 8; i++) {
+    for (let i = 0; i < 9; i++) {
       random += charset[Math.floor(Math.random() * charset.length)];
     }
-    return `DL-${random.slice(0, 3)}-${random.slice(3, 6)}-${random.slice(6, 8)}`;
+    return `DL-${random.slice(0, 3)}-${random.slice(3, 6)}-${random.slice(6, 9)}`;
   }, []);
 
   const { isConnected, sendMessage, onMessage } = useSignaling(localDeviceId);
